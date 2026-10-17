@@ -1,0 +1,127 @@
+{{- if .Values.mockCrmMcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-crm-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mock-crm-mcp
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.mockCrmMcp.port | default 8001 }}
+      targetPort: 8001
+      name: http
+  selector:
+    app: mock-crm-mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-crm-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mock-crm-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-crm-mcp
+  template:
+    metadata:
+      labels:
+        app: mock-crm-mcp
+    spec:
+      containers:
+        - name: mock-crm-mcp
+          image: {{ .Values.mockCrmMcp.image | quote }}
+          imagePullPolicy: {{ .Values.mockCrmMcp.imagePullPolicy | default "IfNotPresent" | quote }}
+          ports:
+            - containerPort: 8001
+              name: http
+          resources:
+            requests:
+              cpu: {{ .Values.mockCrmMcp.resources.requests.cpu }}
+              memory: {{ .Values.mockCrmMcp.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.mockCrmMcp.resources.limits.cpu }}
+              memory: {{ .Values.mockCrmMcp.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+{{- end }}
+{{- if .Values.mockInventoryMcp.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-inventory-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mock-inventory-mcp
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.mockInventoryMcp.port | default 8002 }}
+      targetPort: 8002
+      name: http
+  selector:
+    app: mock-inventory-mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-inventory-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mock-inventory-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-inventory-mcp
+  template:
+    metadata:
+      labels:
+        app: mock-inventory-mcp
+    spec:
+      containers:
+        - name: mock-inventory-mcp
+          image: {{ .Values.mockInventoryMcp.image | quote }}
+          imagePullPolicy: {{ .Values.mockInventoryMcp.imagePullPolicy | default "IfNotPresent" | quote }}
+          ports:
+            - containerPort: 8002
+              name: http
+          resources:
+            requests:
+              cpu: {{ .Values.mockInventoryMcp.resources.requests.cpu }}
+              memory: {{ .Values.mockInventoryMcp.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.mockInventoryMcp.resources.limits.cpu }}
+              memory: {{ .Values.mockInventoryMcp.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+{{- end }}

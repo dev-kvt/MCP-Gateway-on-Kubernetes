@@ -1,0 +1,104 @@
+{{- if .Values.store.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mariadb-secret
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  MARIADB_ROOT_PASSWORD: {{ .Values.store.db.rootPassword | quote }}
+  MARIADB_PASSWORD: {{ .Values.store.db.password | quote }}
+  MARIADB_USER: {{ .Values.store.db.user | quote }}
+  MARIADB_DATABASE: {{ .Values.store.db.name | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-pvc
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.store.db.storageClass }}
+  storageClassName: {{ .Values.store.db.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.store.db.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+      name: mysql
+  selector:
+    app: mariadb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mariadb
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:10.11
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: mariadb-secret
+          ports:
+            - containerPort: 3306
+              name: mysql
+          resources:
+            requests:
+              cpu: {{ .Values.store.db.resources.requests.cpu }}
+              memory: {{ .Values.store.db.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.store.db.resources.limits.cpu }}
+              memory: {{ .Values.store.db.resources.limits.memory }}
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - mariadb-admin ping -u root -p$MARIADB_ROOT_PASSWORD
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - mariadb-admin ping -u root -p$MARIADB_ROOT_PASSWORD
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mariadb-pvc
+{{- end }}

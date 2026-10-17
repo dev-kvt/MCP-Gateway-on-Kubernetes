@@ -1,0 +1,94 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mcp-dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+  selector:
+    app: mcp-dashboard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mcp-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-dashboard
+  template:
+    metadata:
+      labels:
+        app: mcp-dashboard
+    spec:
+      containers:
+        - name: mcp-dashboard
+          image: {{ .Values.dashboard.image | quote }}
+          imagePullPolicy: {{ .Values.dashboard.imagePullPolicy | default "IfNotPresent" | quote }}
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: {{ .Values.dashboard.resources.requests.cpu }}
+              memory: {{ .Values.dashboard.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.dashboard.resources.limits.cpu }}
+              memory: {{ .Values.dashboard.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 5
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dashboard-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      chunked_transfer_encoding off;
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.gateway.hostname }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.gateway.hostname }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-dashboard
+                port:
+                  number: 80
+{{- end }}

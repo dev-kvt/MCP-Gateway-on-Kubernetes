@@ -1,0 +1,151 @@
+{{- if .Values.store.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: store-bootstrap-script
+  namespace: {{ .Release.Namespace }}
+data:
+  bootstrap.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "[Bootstrap] Waiting for WordPress core files in /var/www/html..."
+    until [ -f /var/www/html/wp-includes/version.php ]; do
+      echo "[Bootstrap] WordPress files not populated yet by apache container, waiting 3s..."
+      sleep 3
+    done
+
+    if [ ! -f /var/www/html/wp-config.php ]; then
+      echo "[Bootstrap] Generating wp-config.php..."
+      wp config create \
+        --path=/var/www/html \
+        --dbname="$WORDPRESS_DB_NAME" \
+        --dbuser="$WORDPRESS_DB_USER" \
+        --dbpass="$WORDPRESS_DB_PASSWORD" \
+        --dbhost="$WORDPRESS_DB_HOST" \
+        --skip-check \
+        --force
+
+      echo "define('FS_METHOD', 'direct');" >> /var/www/html/wp-config.php
+      echo "if (isset(\$_SERVER['HTTP_HOST'])) { define('WP_HOME', 'http://' . \$_SERVER['HTTP_HOST']); define('WP_SITEURL', 'http://' . \$_SERVER['HTTP_HOST']); }" >> /var/www/html/wp-config.php
+      echo "\$_SERVER['HTTPS'] = 'on';" >> /var/www/html/wp-config.php
+    fi
+
+    echo "[Bootstrap] Waiting for MariaDB connection..."
+    until wp db query "SELECT 1" --path=/var/www/html >/dev/null 2>&1; do
+      echo "[Bootstrap] Database query failed, waiting 3s..."
+      sleep 3
+    done
+
+    if ! wp core is-installed --path=/var/www/html 2>/dev/null; then
+      echo "[Bootstrap] Installing WordPress core..."
+      wp core install \
+        --path=/var/www/html \
+        --url="$STORE_URL" \
+        --title="Urumi Demo Store" \
+        --admin_user="$ADMIN_USER" \
+        --admin_password="$ADMIN_PASSWORD" \
+        --admin_email="$ADMIN_EMAIL" \
+        --skip-email
+    else
+      echo "[Bootstrap] WordPress core already installed."
+    fi
+
+    echo "[Bootstrap] Ensuring WooCommerce plugin is installed & active..."
+    if ! wp plugin is-active woocommerce --path=/var/www/html 2>/dev/null; then
+      wp plugin install https://downloads.wordpress.org/plugin/woocommerce.9.3.3.zip --activate --path=/var/www/html
+    fi
+
+    echo "[Bootstrap] Setting pretty permalinks (required for WooCommerce REST API)..."
+    wp rewrite structure '/%postname%/' --hard --path=/var/www/html
+
+    echo "[Bootstrap] Enabling Cash on Delivery (COD) for testing..."
+    wp option update woocommerce_cod_settings '{"enabled":"yes","title":"Cash on Delivery","description":"Pay with cash upon delivery.","instructions":"Pay with cash upon delivery.","enable_for_methods":[],"enable_for_virtual":"yes"}' --format=json --path=/var/www/html
+
+    echo "[Bootstrap] Seeding initial sample product if none exist..."
+    wp eval --path=/var/www/html '
+      if (function_exists("wc_get_products")) {
+        $products = wc_get_products(array("limit" => 1));
+        if (empty($products)) {
+          $product = new WC_Product_Simple();
+          $product->set_name("Developer Hoodie");
+          $product->set_regular_price("49.99");
+          $product->set_description("High-performance premium hoodie for engineers.");
+          $product->set_short_description("Comfortable developer hoodie.");
+          $product->set_status("publish");
+          $product->set_catalog_visibility("visible");
+          $id = $product->save();
+          echo "Created demo product with ID: " . $id . "\n";
+        } else {
+          echo "Product already exists.\n";
+        }
+      }
+    '
+
+    echo "[Bootstrap] Generating / retrieving WooCommerce REST API keys..."
+    KEYS=$(wp eval --path=/var/www/html '
+      global $wpdb;
+      $user = get_user_by("login", getenv("ADMIN_USER"));
+      $user_id = $user ? $user->ID : 1;
+      $desc = "MCP Gateway Key";
+      $existing = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}woocommerce_api_keys WHERE description = %s", $desc));
+      if ($existing) {
+        echo "ck_demo_key_urumi_mcp:cs_demo_secret_urumi_mcp";
+      } else {
+        $ck = "ck_demo_key_urumi_mcp";
+        $cs = "cs_demo_secret_urumi_mcp";
+        $wpdb->insert(
+          $wpdb->prefix . "woocommerce_api_keys",
+          array(
+            "user_id" => $user_id,
+            "description" => $desc,
+            "permissions" => "read_write",
+            "consumer_key" => wc_api_hash($ck),
+            "consumer_secret" => $cs,
+            "truncated_key" => substr($ck, -7),
+          ),
+          array("%d", "%s", "%s", "%s", "%s", "%s")
+        );
+        echo $ck . ":" . $cs;
+      }
+    ')
+
+    CK=$(echo "$KEYS" | cut -d':' -f1)
+    CS=$(echo "$KEYS" | cut -d':' -f2)
+
+    echo "[Bootstrap] WooCommerce API Key: $CK"
+
+    TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+    CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+    echo "[Bootstrap] Storing credentials in Kubernetes secret 'woocommerce-api-creds'..."
+    PAYLOAD=$(cat <<EOF
+    {
+      "apiVersion": "v1",
+      "kind": "Secret",
+      "metadata": {
+        "name": "woocommerce-api-creds",
+        "namespace": "$NAMESPACE"
+      },
+      "type": "Opaque",
+      "stringData": {
+        "WOOCOMMERCE_URL": "$STORE_INTERNAL_URL",
+        "WOOCOMMERCE_EXTERNAL_URL": "$STORE_URL",
+        "WOOCOMMERCE_CONSUMER_KEY": "$CK",
+        "WOOCOMMERCE_CONSUMER_SECRET": "$CS"
+      }
+    }
+    EOF
+    )
+
+    curl -s --cacert $CACERT -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      -X POST "https://kubernetes.default.svc/api/v1/namespaces/$NAMESPACE/secrets" \
+      -d "$PAYLOAD" || \
+    curl -s --cacert $CACERT -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/strategic-merge-patch+json" \
+      -X PATCH "https://kubernetes.default.svc/api/v1/namespaces/$NAMESPACE/secrets/woocommerce-api-creds" \
+      -d "$PAYLOAD"
+
+    echo "[Bootstrap] Successfully completed store initialization!"
+{{- end }}

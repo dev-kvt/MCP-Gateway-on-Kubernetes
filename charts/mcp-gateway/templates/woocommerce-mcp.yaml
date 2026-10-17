@@ -1,0 +1,66 @@
+{{- if .Values.woocommerceMcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: woocommerce-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: woocommerce-mcp
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.woocommerceMcp.port | default 8000 }}
+      targetPort: 8000
+      name: http
+  selector:
+    app: woocommerce-mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: woocommerce-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: woocommerce-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: woocommerce-mcp
+  template:
+    metadata:
+      labels:
+        app: woocommerce-mcp
+    spec:
+      containers:
+        - name: woocommerce-mcp
+          image: {{ .Values.woocommerceMcp.image | quote }}
+          imagePullPolicy: {{ .Values.woocommerceMcp.imagePullPolicy | default "IfNotPresent" | quote }}
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: woocommerce-api-creds
+          resources:
+            requests:
+              cpu: {{ .Values.woocommerceMcp.resources.requests.cpu }}
+              memory: {{ .Values.woocommerceMcp.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.woocommerceMcp.resources.limits.cpu }}
+              memory: {{ .Values.woocommerceMcp.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+{{- end }}

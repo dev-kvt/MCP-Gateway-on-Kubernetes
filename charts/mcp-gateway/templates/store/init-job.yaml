@@ -1,0 +1,73 @@
+{{- if .Values.store.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: store-bootstrap-job
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: store-bootstrap
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: store-bootstrap
+    spec:
+      serviceAccountName: store-bootstrap-sa
+      restartPolicy: OnFailure
+      volumes:
+        - name: wp-data
+          persistentVolumeClaim:
+            claimName: wordpress-pvc
+        - name: script-vol
+          configMap:
+            name: store-bootstrap-script
+            defaultMode: 0755
+      containers:
+        - name: bootstrap
+          image: wordpress:cli
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 33
+            runAsGroup: 33
+          volumeMounts:
+            - name: wp-data
+              mountPath: /var/www/html
+            - name: script-vol
+              mountPath: /scripts
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: STORE_URL
+              value: "http://{{ .Values.store.hostname }}"
+            - name: STORE_INTERNAL_URL
+              value: "http://wordpress.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: ADMIN_USER
+              value: {{ .Values.store.adminUser | quote }}
+            - name: ADMIN_PASSWORD
+              value: {{ .Values.store.adminPassword | quote }}
+            - name: ADMIN_EMAIL
+              value: {{ .Values.store.adminEmail | quote }}
+            - name: WORDPRESS_DB_HOST
+              value: "mariadb:3306"
+            - name: WORDPRESS_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: MARIADB_DATABASE
+            - name: WORDPRESS_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: MARIADB_USER
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mariadb-secret
+                  key: MARIADB_PASSWORD
+          command:
+            - /bin/sh
+            - /scripts/bootstrap.sh
+{{- end }}

@@ -1,0 +1,114 @@
+global:
+  domainSuffix: "127.0.0.1.nip.io"
+  environment: "local"
+
+store:
+  enabled: true
+  hostname: "store.127.0.0.1.nip.io"
+  adminUser: "admin"
+  adminPassword: "AdminPassword123!"
+  adminEmail: "admin@example.com"
+  db:
+    name: "wordpress"
+    user: "wordpress"
+    password: "WpDbPassword123!"
+    rootPassword: "DbRootPassword123!"
+    storage: 1Gi
+    storageClass: "local-path"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+  wp:
+    storage: 2Gi
+    storageClass: "local-path"
+    resources:
+      requests:
+        cpu: "150m"
+        memory: "256Mi"
+      limits:
+        cpu: "800m"
+        memory: "768Mi"
+
+woocommerceMcp:
+  enabled: true
+  image: "mcp-woocommerce:latest"
+  imagePullPolicy: "IfNotPresent"
+  port: 8000
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+
+mockCrmMcp:
+  enabled: true
+  image: "mcp-mock-crm:latest"
+  imagePullPolicy: "IfNotPresent"
+  port: 8001
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+mockInventoryMcp:
+  enabled: true
+  image: "mcp-mock-inventory:latest"
+  imagePullPolicy: "IfNotPresent"
+  port: 8002
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+gateway:
+  enabled: true
+  hostname: "gateway.127.0.0.1.nip.io"
+  image: "mcp-gateway:latest"
+  imagePullPolicy: "IfNotPresent"
+  port: 3000
+  jwtSecret: "SuperSecretJwtKeyChangeMeInProd123!"
+  adminKey: "urumi_live_admin_initial_master_key_999"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "192Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  storage:
+    size: 512Mi
+    storageClass: "local-path"
+
+dashboard:
+  enabled: true
+  image: "mcp-dashboard:latest"
+  imagePullPolicy: "IfNotPresent"
+  resources:
+    requests:
+      cpu: "20m"
+      memory: "32Mi"
+    limits:
+      cpu: "100m"
+      memory: "64Mi"
+
+# Chat agent LLM provider (OpenAI-compatible API; leave llmApiKey empty to run without chat)
+chat:
+  llmApiKey: ""
+  llmBaseUrl: "https://api.openai.com/v1"
+  llmModel: "gpt-4o-mini"
+
+ingress:
+  className: "traefik"
+  tls: false

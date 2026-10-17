@@ -1,0 +1,30 @@
+global:
+  domainSuffix: "urumi-demo.com"
+  environment: "production"
+
+store:
+  hostname: "store.urumi-demo.com"
+  db:
+    storageClass: "hcloud-volumes" # or cloud provider CSI
+  wp:
+    storageClass: "hcloud-volumes"
+
+gateway:
+  hostname: "gateway.urumi-demo.com"
+  storage:
+    storageClass: "hcloud-volumes"
+
+dashboard:
+  enabled: true
+
+chat:
+  llmApiKey: "" # provide via --set / secret in prod
+  llmBaseUrl: "https://api.openai.com/v1"
+  llmModel: "gpt-4o-mini"
+
+ingress:
+  className: "traefik"
+  tls: true
+  tlsSecretName: gateway-tls
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"

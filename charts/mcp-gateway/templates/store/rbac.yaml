@@ -1,0 +1,31 @@
+{{- if .Values.store.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: store-bootstrap-sa
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: store-bootstrap-role
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: store-bootstrap-rb
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: store-bootstrap-sa
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: store-bootstrap-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

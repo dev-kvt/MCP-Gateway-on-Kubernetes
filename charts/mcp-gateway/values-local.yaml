@@ -1,0 +1,25 @@
+global:
+  domainSuffix: "127.0.0.1.nip.io"
+  environment: "local"
+
+store:
+  hostname: "store.127.0.0.1.nip.io"
+  db:
+    storageClass: "local-path"
+  wp:
+    storageClass: "local-path"
+
+gateway:
+  hostname: "gateway.127.0.0.1.nip.io"
+
+dashboard:
+  enabled: true
+
+chat:
+  llmApiKey: ""
+  llmBaseUrl: "https://api.openai.com/v1"
+  llmModel: "gpt-4o-mini"
+
+ingress:
+  className: "traefik"
+  tls: false

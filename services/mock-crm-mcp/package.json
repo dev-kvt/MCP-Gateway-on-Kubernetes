@@ -1,0 +1,22 @@
+{
+  "name": "mock-crm-mcp",
+  "version": "1.0.0",
+  "description": "Mock CRM MCP server for customer directory and support notes",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.4",
+    "typescript": "^5.7.3"
+  }
+}

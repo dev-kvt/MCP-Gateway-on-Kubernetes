@@ -1,0 +1,145 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gateway-data-pvc
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.gateway.storage.storageClass }}
+  storageClassName: {{ .Values.gateway.storage.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.gateway.storage.size }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-secrets
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  JWT_SECRET: {{ .Values.gateway.jwtSecret | quote }}
+  ADMIN_INITIAL_KEY: {{ .Values.gateway.adminKey | quote }}
+  ADMIN_USERNAME: {{ .Values.gateway.adminUsername | default "admin" | quote }}
+  ADMIN_PASSWORD: {{ .Values.gateway.adminPassword | default "admin123" | quote }}
+  {{- if .Values.chat.llmApiKey }}
+  LLM_API_KEY: {{ .Values.chat.llmApiKey | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: gateway-backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.gateway.port | default 3000 }}
+      targetPort: 3000
+      name: http
+  selector:
+    app: gateway-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: gateway-backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gateway-backend
+  template:
+    metadata:
+      labels:
+        app: gateway-backend
+    spec:
+      containers:
+        - name: gateway-backend
+          image: {{ .Values.gateway.image | quote }}
+          imagePullPolicy: {{ .Values.gateway.imagePullPolicy | default "IfNotPresent" | quote }}
+          ports:
+            - containerPort: {{ .Values.gateway.port | default 3000 }}
+              name: http
+          env:
+            - name: PORT
+              value: {{ .Values.gateway.port | default 3000 | quote }}
+            - name: DB_PATH
+              value: /app/data/gateway.db
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-secrets
+                  key: JWT_SECRET
+            - name: ADMIN_INITIAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-secrets
+                  key: ADMIN_INITIAL_KEY
+            - name: ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-secrets
+                  key: ADMIN_USERNAME
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-secrets
+                  key: ADMIN_PASSWORD
+            {{- if .Values.chat.llmApiKey }}
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-secrets
+                  key: LLM_API_KEY
+            {{- end }}
+            - name: LLM_BASE_URL
+              value: {{ .Values.chat.llmBaseUrl | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.chat.llmModel | quote }}
+            # Upstream MCP servers are cluster-internal services
+            - name: WOOCOMMERCE_MCP_URL
+              value: "http://woocommerce-mcp.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.woocommerceMcp.port | default 8000 }}"
+            - name: MOCK_CRM_MCP_URL
+              value: "http://mock-crm-mcp.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.mockCrmMcp.port | default 8001 }}"
+            - name: MOCK_INVENTORY_MCP_URL
+              value: "http://mock-inventory-mcp.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.mockInventoryMcp.port | default 8002 }}"
+          resources:
+            requests:
+              cpu: {{ .Values.gateway.resources.requests.cpu }}
+              memory: {{ .Values.gateway.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.gateway.resources.limits.cpu }}
+              memory: {{ .Values.gateway.resources.limits.memory }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.gateway.port | default 3000 }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.gateway.port | default 3000 }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: gateway-data
+              mountPath: /app/data
+      volumes:
+        - name: gateway-data
+          persistentVolumeClaim:
+            claimName: gateway-data-pvc
+{{- end }}
